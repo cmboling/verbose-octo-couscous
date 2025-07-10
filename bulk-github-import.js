@@ -2,13 +2,13 @@
 
 /**
  * FOSSA Bulk GitHub Import Script
- * 
+ *
  * This script automates bulk importing of GitHub repositories into FOSSA
  * using the same Quick Import API that the web interface uses.
- * 
+ *
  * Usage:
  *   node bulk-github-import.js --org <org-name> --token <github-token> --session <fossa-session> --filter-value <id> [options]
- * 
+ *
  * Options:
  *   --dry-run              Show what would be imported without actually importing
  *   --exclude-forks        Skip forked repositories
@@ -35,7 +35,7 @@ class FossaBulkImporter {
       csrfToken: null,
       ...options
     };
-    
+
     this.validateOptions();
     this.stats = {
       totalGitHubRepos: 0,
@@ -83,11 +83,11 @@ class FossaBulkImporter {
       });
 
       req.on('error', reject);
-      
+
       if (options.body) {
         req.write(JSON.stringify(options.body));
       }
-      
+
       req.end();
     });
   }
@@ -113,12 +113,12 @@ class FossaBulkImporter {
       'Referer': 'https://app.fossa.com/projects/import/github-app',
       ...options.headers
     };
-    
+
     // Add CSRF token if provided
     if (this.options.csrfToken) {
       headers['csrf-token'] = this.options.csrfToken;
     }
-    
+
     return await this.makeRequest('app.fossa.com', path, {
       ...options,
       headers
@@ -127,16 +127,16 @@ class FossaBulkImporter {
 
   async getAllGitHubRepos() {
     console.log(`\n📥 Fetching repositories from GitHub organization: ${this.options.org}`);
-    
+
     const allRepos = [];
     let page = 1;
     let hasMore = true;
 
     while (hasMore) {
       console.log(`  Fetching page ${page}...`);
-      
+
       const response = await this.makeGitHubRequest(`/orgs/${this.options.org}/repos`, page);
-      
+
       if (response.status !== 200) {
         throw new Error(`GitHub API error: ${response.status} - ${JSON.stringify(response.data)}`);
       }
@@ -151,45 +151,45 @@ class FossaBulkImporter {
 
     this.stats.totalGitHubRepos = allRepos.length;
     console.log(`  ✅ Found ${allRepos.length} repositories`);
-    
+
     return allRepos;
   }
 
   async getAllFossaProjects() {
     console.log(`\n📋 Fetching existing FOSSA projects...`);
-    
+
     const response = await this.makeFossaRequest('/api/projects?count=10000');
-    
+
     if (response.status !== 200) {
       throw new Error(`FOSSA API error: ${response.status} - ${JSON.stringify(response.data)}`);
     }
 
     const projects = response.data;
     console.log(`  ✅ Found ${projects.length} existing FOSSA projects`);
-    
+
     // Create lookup maps for efficient duplicate detection
     const projectsByLocator = new Map();
     const projectsByUrl = new Map();
-    
+
     for (const project of projects) {
       if (project.locator) {
         projectsByLocator.set(project.locator, project);
       }
-      
+
       // Try to extract GitHub URL from various fields
       const urls = [
         project.url,
         project.git_url,
         project.repository_url
       ].filter(Boolean);
-      
+
       for (const url of urls) {
         if (url && url.includes('github.com')) {
           projectsByUrl.set(this.normalizeGitHubUrl(url), project);
         }
       }
     }
-    
+
     return { projects, projectsByLocator, projectsByUrl };
   }
 
@@ -204,12 +204,12 @@ class FossaBulkImporter {
 
   async getBranches(owner, repo) {
     const response = await this.makeGitHubRequest(`/repos/${owner}/${repo}/branches`);
-    
+
     if (response.status !== 200) {
       console.warn(`    ⚠️  Could not fetch branches for ${owner}/${repo}: ${response.status}`);
       return ['main']; // Default fallback
     }
-    
+
     return response.data.map(branch => branch.name);
   }
 
@@ -217,7 +217,7 @@ class FossaBulkImporter {
     // Get branches for this repository
     const branches = await this.getBranches(repo.owner.login, repo.name);
     const defaultBranch = repo.default_branch || 'main';
-    
+
     return {
       id: repo.id,
       title: repo.name,
@@ -238,41 +238,41 @@ class FossaBulkImporter {
 
   filterRepositories(repos) {
     console.log(`\n🔍 Filtering repositories...`);
-    
+
     let filtered = repos;
-    
+
     if (this.options.excludeForks) {
       const beforeCount = filtered.length;
       filtered = filtered.filter(repo => !repo.fork);
       console.log(`  📌 Excluded ${beforeCount - filtered.length} forks`);
     }
-    
+
     if (this.options.excludePrivate) {
       const beforeCount = filtered.length;
       filtered = filtered.filter(repo => !repo.private);
       console.log(`  📌 Excluded ${beforeCount - filtered.length} private repositories`);
     }
-    
+
     this.stats.filteredRepos = filtered.length;
     console.log(`  ✅ ${filtered.length} repositories after filtering`);
-    
+
     return filtered;
   }
 
   findDuplicates(transformedRepos, fossaProjects) {
     console.log(`\n🔍 Checking for existing projects...`);
-    
+
     const { projectsByLocator, projectsByUrl } = fossaProjects;
     const newRepos = [];
     const existingRepos = [];
-    
+
     for (const repo of transformedRepos) {
       const locator = repo.locator;
       const normalizedUrl = this.normalizeGitHubUrl(repo.url);
-      
+
       const existingByLocator = projectsByLocator.get(locator);
       const existingByUrl = projectsByUrl.get(normalizedUrl);
-      
+
       if (existingByLocator || existingByUrl) {
         existingRepos.push({
           repo,
@@ -283,13 +283,13 @@ class FossaBulkImporter {
         newRepos.push(repo);
       }
     }
-    
+
     this.stats.existingProjects = existingRepos.length;
     this.stats.newImports = newRepos.length;
-    
+
     console.log(`  ✅ Found ${existingRepos.length} existing projects`);
     console.log(`  ✅ Found ${newRepos.length} new repositories to import`);
-    
+
     if (existingRepos.length > 0) {
       console.log(`\n📋 Already imported repositories:`);
       existingRepos.slice(0, 10).forEach(({ repo, existing, matchType }) => {
@@ -299,7 +299,7 @@ class FossaBulkImporter {
         console.log(`    ... and ${existingRepos.length - 10} more`);
       }
     }
-    
+
     return { newRepos, existingRepos };
   }
 
@@ -322,7 +322,7 @@ class FossaBulkImporter {
     };
 
     console.log(`\n🚀 Importing batch of ${repos.length} repositories...`);
-    
+
     if (this.options.dryRun) {
       console.log(`  🔍 DRY RUN: Would import:`);
       repos.forEach(repo => {
@@ -357,17 +357,17 @@ class FossaBulkImporter {
     try {
       // Step 1: Get all GitHub repositories
       const allGitHubRepos = await this.getAllGitHubRepos();
-      
+
       // Step 2: Filter repositories
       const filteredRepos = this.filterRepositories(allGitHubRepos);
-      
+
       // Step 3: Get existing FOSSA projects
       const fossaProjects = await this.getAllFossaProjects();
-      
+
       // Step 4: Transform repositories for FOSSA format
       console.log(`\n🔄 Transforming repositories for FOSSA format...`);
       const transformedRepos = [];
-      
+
       for (const repo of filteredRepos) {
         try {
           const transformed = await this.transformRepoForFossa(repo);
@@ -377,31 +377,32 @@ class FossaBulkImporter {
           this.stats.errors++;
         }
       }
-      
+
       // Step 5: Find duplicates
       const { newRepos, existingRepos } = this.findDuplicates(transformedRepos, fossaProjects);
-      
+
       if (newRepos.length === 0) {
         console.log(`\n✅ No new repositories to import!`);
         this.printStats();
         return;
       }
-      
+
       // Step 6: Import in batches
       console.log(`\n📦 Importing ${newRepos.length} repositories in batches of ${this.options.batchSize}...`);
-      
+
       for (let i = 0; i < newRepos.length; i += this.options.batchSize) {
         const batch = newRepos.slice(i, i + this.options.batchSize);
         const batchNum = Math.floor(i / this.options.batchSize) + 1;
         const totalBatches = Math.ceil(newRepos.length / this.options.batchSize);
-        
+
         console.log(`\n📦 Batch ${batchNum}/${totalBatches}`);
-        
+
         try {
           const result = await this.importBatch(batch);
-          
+
           if (result.success) {
-            this.stats.newImports += result.imported || batch.length;
+            // newImports is already set correctly in findDuplicates()
+            // Don't modify it here to avoid double counting
           } else {
             this.stats.errors += batch.length;
             console.error(`  ❌ Batch ${batchNum} failed`);
@@ -410,16 +411,16 @@ class FossaBulkImporter {
           console.error(`  ❌ Batch ${batchNum} error: ${error.message}`);
           this.stats.errors += batch.length;
         }
-        
+
         // Add delay between batches to avoid rate limiting
         if (i + this.options.batchSize < newRepos.length) {
           console.log(`  ⏱️  Waiting 2 seconds before next batch...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
-      
+
       this.printStats();
-      
+
     } catch (error) {
       console.error(`\n❌ Fatal error: ${error.message}`);
       process.exit(1);
@@ -441,10 +442,10 @@ class FossaBulkImporter {
 function parseArgs() {
   const args = process.argv.slice(2);
   const options = {};
-  
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     switch (arg) {
       case '--help':
         console.log(`
@@ -479,53 +480,53 @@ Examples:
         `);
         process.exit(0);
         break;
-      
+
       case '--org':
         options.org = args[++i];
         break;
-      
+
       case '--token':
         options.githubToken = args[++i];
         break;
-      
+
       case '--session':
         options.fossaSession = args[++i];
         break;
-      
+
       case '--filter-value':
         options.filterValue = args[++i];
         break;
-      
+
       case '--instance-name':
         options.instanceName = args[++i];
         break;
-      
+
       case '--csrf-token':
         options.csrfToken = args[++i];
         break;
-      
+
       case '--batch-size':
         options.batchSize = parseInt(args[++i]);
         break;
-      
+
       case '--dry-run':
         options.dryRun = true;
         break;
-      
+
       case '--exclude-forks':
         options.excludeForks = true;
         break;
-      
+
       case '--exclude-private':
         options.excludePrivate = true;
         break;
-      
+
       default:
         console.error(`Unknown option: ${arg}`);
         process.exit(1);
     }
   }
-  
+
   return options;
 }
 

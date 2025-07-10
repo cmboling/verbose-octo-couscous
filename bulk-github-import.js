@@ -370,7 +370,13 @@ class FossaBulkImporter {
 
       for (const repo of filteredRepos) {
         try {
+          console.log(`  🔄 Transforming: ${repo.name} (${repo.owner.login}/${repo.name})`);
           const transformed = await this.transformRepoForFossa(repo);
+          console.log(`    ✅ Locator: ${transformed.locator}`);
+          console.log(`    📝 Description: ${transformed.description || 'No description'}`);
+          console.log(`    🌿 Default branch: ${transformed.branch}`);
+          console.log(`    🔒 Private: ${transformed.isPrivate ? 'Yes' : 'No'}`);
+          console.log(`    🍴 Fork: ${transformed.isFork ? 'Yes' : 'No'}`);
           transformedRepos.push(transformed);
         } catch (error) {
           console.warn(`  ⚠️  Failed to transform ${repo.name}: ${error.message}`);

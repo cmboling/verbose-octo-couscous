@@ -309,12 +309,9 @@ class FossaBulkImporter {
       options: {
         selectedTeams: [],
         send_badge_pr: true,
-        policy_update: 'organization',
+        policy_update: 'always',
         policy_access: 'default',
         update_hook: null,
-        vcs_host: 'github-app',
-        type: 'autobuild',
-        skip_notifications: false,
         policy_notifications: 'true'
       },
       instanceName: this.options.instanceName,
